@@ -14,5 +14,5 @@ for file in "$rawpath"/*.csv; do
         xargs -P 14 -I {} curl -G {} -d "binary_target=binary" \
             -d "ultra_premium=false" \
             -d "api_key=$SCRAPERAPI_KEY" -O -J -L --output-dir "$pdfpath" -w "%{json}\n" |
-            jq '{filename_effective, url}' > "log.json"
+            jq '{filename_effective, url}' >> "log.json"
 done
