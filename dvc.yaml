@@ -19,6 +19,7 @@ stages:
     cmd: stages/02_download.sh
     deps:
       - stages/02_download.sh
+      - stages/03_check_pdfs.py
       - raw
     outs:
       - pdfs
