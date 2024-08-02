@@ -19,8 +19,13 @@ stages:
     cmd: stages/02_download.sh
     deps:
       - stages/02_download.sh
-      - stages/03_check_pdfs.py
       - raw
     outs:
+      - pdfs
+      - log.json
+  check_pdfs:
+    cmd: python3 stages/03_check_pdfs.py
+    deps:
+      - stages/03_check_pdfs.py
       - pdfs
       - log.json
