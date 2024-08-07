@@ -9,19 +9,23 @@
 # dvc repro <stage>
 
 stages:
+  status:
+    cmd: python3 stages/00_status.py
   load_urls:
     cmd: stages/01_load_urls.sh
     deps:
       - stages/01_load_urls.sh
     outs:
-      - raw
+      - raw:
+         persist: true
   download: 
     cmd: stages/02_download.sh
     deps:
       - stages/02_download.sh
       - raw
     outs:
-      - pdfs
+      - pdfs:
+          persist: true
       - log.json
   check_pdfs:
     cmd: python3 stages/03_check_pdfs.py
