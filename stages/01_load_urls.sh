@@ -1,5 +1,7 @@
 #! /usr/bin/bash
 
+set -euo pipefail
+
 rawpath="raw"
 
 mkdir $rawpath

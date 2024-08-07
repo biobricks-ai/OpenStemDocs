@@ -41,12 +41,15 @@ def get_raw_url(s):
 def handle_bad_pdfs(data):
     raw_url = get_raw_url(data["url"])
     console.log(f"Retrying download from {raw_url}")
-    retry_resp = requests.get(data["url"], stream=True, params=SCRAPERAPI_PARAMS)
-    if retry_resp.status_code != 200:
+    filename = Path("pdfs/" + data["filename_effective"])
+    retry_resp = None
+    if data["response_code"] in [400, 500] or not is_readable_pdf(filename):
+        retry_resp = requests.get(data["url"], stream=True, params=SCRAPERAPI_PARAMS)
+    if retry_resp and retry_resp.status_code != 200:
         console.log(f"Retry of {raw_url} failed.")
         return False
-    else:
-        match retry_resp.encoding:
+    elif retry_resp is not None:
+        match retry_resp.headers["content_type"]:
             case "text/plain" | "text/html":
                 return False
             case "application/pdf":
@@ -67,8 +70,7 @@ if __name__ == '__main__':
             for obj in logfile:
                 metadata = {"url": get_raw_url(obj["url"]), "filename": obj["filename_effective"]}
                 output.append(metadata)
-                if obj["response_code"] in [400, 500]:
-                    if not handle_bad_pdfs(obj):
+                if not handle_bad_pdfs(obj):
                         print("Retry failed.")
         df = pd.DataFrame.from_records(output)
         df.to_parquet("brick/docs.parquet")
