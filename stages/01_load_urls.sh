@@ -4,7 +4,7 @@ rawpath="raw"
 
 mkdir $rawpath
 
-files=$(aws-cli.aws s3 ls --recursive --no-sign-request "s3://openalex/data/works/updated_date=2024-06-30" | awk '{print $4}')
+files=$(aws-cli.aws s3 ls --recursive --no-sign-request "s3://openalex/data/works/updated_date=2024-07-30" | awk '{print $4}')
 
 for file in $files;
 do
