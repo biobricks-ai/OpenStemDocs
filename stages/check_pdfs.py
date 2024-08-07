@@ -1,4 +1,6 @@
 import json
+
+import pandas as pd
 import jsonlines
 import os
 from pypdf import PdfReader
@@ -60,11 +62,16 @@ def handle_bad_pdfs(data):
 
 if __name__ == '__main__':
     try:
+        output = []
         with jsonlines.open("log.json", "r") as logfile:    
             for obj in logfile:
+                metadata = {"url": get_raw_url(obj["url"]), "filename": obj["filename_effective"]}
+                output.append(metadata)
                 if obj["response_code"] in [400, 500]:
                     if not handle_bad_pdfs(obj):
-                        print("Retry failed.")        
+                        print("Retry failed.")
+        df = pd.DataFrame.from_records(output)
+        df.to_parquet("brick/docs.parquet")
     except json.JSONDecodeError:
         print("Error decoding JSON")
     except KeyError:
