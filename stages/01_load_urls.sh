@@ -4,7 +4,7 @@ set -euo pipefail
 
 rawpath="raw"
 
-mkdir $rawpath
+if [[ ! -d $rawpath ]]; then mkdir $rawpath; fi
 
 declare today;
 
@@ -19,7 +19,7 @@ for file in $files;
 do
     filename="s3://openalex/$file"
     outfile="$(basename "$file" .gz).csv"
-    duckdb -c "copy (select locations->'\$[0].pdf_url' as url, doi 
-        from read_json('$filename', ignore_errors=true) where url is not null)
+    duckdb -c "copy (select locations->'\$[0].pdf_url' as url 
+        from read_json('$filename', ignore_errors=true, maximum_object_size=51779080) where url is not null)
     to '$rawpath/$outfile' (HEADER false)"
 done
