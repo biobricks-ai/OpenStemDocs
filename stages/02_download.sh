@@ -3,7 +3,7 @@
 set -eo pipefail
 
 rawpath="raw"
-pdfpath="mnt/ssd_raid/workspace-bhlieberman/pdfs"
+pdfpath="/mnt/ssd_raid/workspace-bhlieberman/pdfs"
 
 export pdfpath
 
@@ -15,12 +15,6 @@ fi
 if [[ ! -f ~+/log.json ]]; then
   touch "log.json"
 fi
-
-function rename() {
-  mv "$2" "$1"
-}
-
-export -f rename
 
 function compute_hash() {
   # computes MD5 hash of file contents to
@@ -43,7 +37,7 @@ function compute_hash() {
 # get rid of triple quotes left by DuckDB
 find $rawpath -type f -iname "*.csv" -exec sed -i "s/\"\"\"//g" {} \;
 
-for file in "$rawpath"/part_{006..030}.csv; do
+for file in "$rawpath"/part_{007..030}.csv; do
   # check if the file has any URLs in it
   if [[ $(wc -l "$file") -eq 0 ]]; then
     echo "Empty partition, skipping..."
@@ -57,7 +51,7 @@ for file in "$rawpath"/part_{006..030}.csv; do
     mkdir -p "$pdfpath/$subdir_name"
   fi
 
-  awk '{print "http://api.scraperapi.com/?&url=" $1}' "$file" |
+  awk '{print "http://api.scraperapi.com/?&url=" $2}' "$file" |
     xargs -P 20 -I {} curl -G {} -s -d "binary_target=binary" \
       -d "ultra_premium=false" -d "api_key=$SCRAPERAPI_KEY" \
       -O -J -L --output-dir "$pdfpath/$subdir_name" -w "%{json}\n" |

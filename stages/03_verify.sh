@@ -2,6 +2,7 @@
 
 set -euxo pipefail
 
+pdfpath="/mnt/ssd_raid/workspace-bhlieberman/pdfs"
 need_retry=$(jq -f "$(pwd)/stages/filter_responses.jq" "$(pwd)/log.json")
 
 if [[ ! $need_retry ]]; then

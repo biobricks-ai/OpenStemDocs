@@ -16,6 +16,8 @@ stages:
     deps:
       - stages/01_load_urls.sh
     outs:
+      - meta:
+         persist: true
       - raw:
          persist: true
   download: 
@@ -28,8 +30,8 @@ stages:
           persist: true
       - log.json
   check_pdfs:
-    cmd: python3 stages/03_check_pdfs.py
+    cmd: stages/03_verify.sh
     deps:
-      - stages/03_check_pdfs.py
+      - stages/03_verify.sh
       - pdfs
       - log.json
