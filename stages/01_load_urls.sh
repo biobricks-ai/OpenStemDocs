@@ -19,7 +19,7 @@ for file in $files;
 do
     filename="s3://openalex/$file"
     outfile="$(basename "$file" .gz).csv"
-    duckdb -c "copy (select doi, locations->'\$[0].pdf_url' as url 
+    duckdb -c "copy (select doi, best_oa_location->'$.pdf_url' as url 
         from read_json('$filename', ignore_errors=true, maximum_object_size=100000000) where url is not null)
     to '$rawpath/$outfile' (HEADER false)"
 done
