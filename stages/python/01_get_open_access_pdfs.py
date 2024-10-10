@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import duckdb
 
 # Get last processed date  
@@ -15,9 +15,8 @@ def get_last_processed_date():
         with open(last_processed_file, 'r') as file:
             return datetime.strptime(file.read(), "%Y-%m-%d").date()
     else:
-        print("No last processed date found, using one month before today.")
-        today = date.today()
-        return today.replace(month=today.month - 1)
+        print("No last processed date found, using 2 weeks before today.")
+        return date.today() - timedelta(days=14)
 
 # Save last processed date into a file
 def save_last_processed_date(processed_date):
@@ -40,11 +39,11 @@ files = subprocess.check_output(s3_run.split(), text=True).splitlines()
 filtered_files = []
 for file in files:
     parts = file.split()
-    if len(parts) >= 4:
-        date_str = parts[0] + " " + parts[1]
-        #19 characters for date YYYY-MM-DD HH:MM:SS
-        if len(date_str) == 19: 
-            file_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S").date()
+    if len(parts) >= 2:
+        date_str = parts[0]
+        # YYYY-MM-DD
+        if len(date_str) == 10: 
+            file_date = datetime.strptime(date_str, "%Y-%m-%d").date()
             if file_date > last_processed_date:
                 filtered_files.append(file)
         else:
@@ -56,17 +55,13 @@ def process_file(file):
     outfile = Path(file.split()[-1]).with_suffix('.csv').name
     outpath = raw_path / outfile
     
-    if output_path.exists():
-        print(f"Skipping existing file: {outfile}")
-        return
-
     query = f"""
     copy (
         select doi, best_oa_location->'$.pdf_url' as url 
         from read_json('{filename}', ignore_errors=true, maximum_object_size=100000000) 
         where url is not null and url != 'null' and not url like '%null'
     )
-    to '{outpath}' (HEADER false)
+    to '{outpath}' (HEADER false, APPEND)
     """
     
     with duckdb.connect(':memory:') as conn:
@@ -78,7 +73,7 @@ with ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
     executor.map(process_file, filtered_files)
 
 
-# Create brick directory and load data into parquet
+# Create output (brick) directory and load data into parquet
 # If parquet file exists, append data to it. Otherwise, create new parquet file.
 out = Path('brick')
 out.mkdir(exist_ok=True)
@@ -87,11 +82,9 @@ parquet_file = out / 'open_alex_open_acccess_pdfs.parquet'
 if parquet_file.exists():
     conn.execute(f"""
     copy (
-        select * from (
-            select * from parquet_scan('{parquet_file}')
-            union all
-            select * from read_csv_auto('{raw_path}/*.csv', union_by_name=true)
-        )
+        select * from parquet_scan('{parquet_file}')
+        union all
+        select * from read_csv_auto('{raw_path}/*.csv', union_by_name=true)
     ) to '{parquet_file}' (format parquet, overwrite_or_ignore)
     """)
 else:
@@ -101,11 +94,9 @@ conn.close()
 
 # Update the last processed date
 if filtered_files:
-    last_processed_date = max(datetime.strptime(file.split()[1].split('=')[1], "%Y-%m-%d").date() for file in filtered_files)
-    
-    with open('last_processed_date.txt', 'w') as file:
-        file.write(str(last_processed_date))
+    last_processed_date = max(datetime.strptime(file.split()[0], "%Y-%m-%d").date() for file in filtered_files)
 
+    save_last_processed_date(last_processed_date)
 
 print(f"Processed files up to: {last_processed_date}")
 
