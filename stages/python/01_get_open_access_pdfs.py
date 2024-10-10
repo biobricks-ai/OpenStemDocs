@@ -6,6 +6,9 @@ import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 import duckdb
+import boto3
+from botocore import UNSIGNED
+from botocore.client import Config
 
 # Get last processed date  
 # If there is no last processed date, use the date of one month before today. 
@@ -31,20 +34,27 @@ raw_path = Path('download')
 raw_path.mkdir(exist_ok=True)
 
 # List S3 files
-s3_run = f"aws s3 ls --recursive --no-sign-request s3://openalex/data/works/"
-files = subprocess.check_output(s3_run.split(), text=True).splitlines()
+def s3_run(bucket, prefix):
+    s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
+    paginator = s3.get_paginator('list_objects_v2')
+
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get('Contents', []):
+            yield obj['Key'], obj['LastModified'].date()
 
 # Filter files by last processed date
 filtered_files = [
-    file for file in files 
-    if len(file.split()) >= 2 
-    and datetime.strptime(file.split()[0], "%Y-%m-%d").date() > last_processed_date
+    (key, date) for key, date in s3_run('openalex', 'data/works/')
+    if date > last_processed_date
 ]
 
+
 # Process each file
-def process_file(file):
-    filename = f"s3://openalex/{file.split()[-1]}"
-    outfile = Path(file.split()[-1]).with_suffix('.csv').name
+# APPEND data to existing csv file  
+def process_file(file_info):
+    key, _ = file_info
+    filename = f"s3://openalex/{key}"
+    outfile = Path(key).name.replace('.gz', '.csv')
     outpath = raw_path / outfile
     
     query = f"""
@@ -67,6 +77,7 @@ with ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
 
 # Create output (brick) directory and load data into parquet
 # If parquet file exists, append data to it. Otherwise, create new parquet file.
+# UNION ALL combines data from existing parquet file and new csv files.
 out = Path('brick')
 out.mkdir(exist_ok=True)
 conn = duckdb.connect(':memory:')
@@ -86,8 +97,7 @@ conn.close()
 
 # Update the last processed date
 if filtered_files:
-    last_processed_date = max(datetime.strptime(file.split()[0], "%Y-%m-%d").date() for file in filtered_files)
-
+    last_processed_date = max(date for _, date in filtered_files)
     save_last_processed_date(last_processed_date)
 
 print(f"Processed files up to: {last_processed_date}")
