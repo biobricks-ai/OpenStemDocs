@@ -14,11 +14,12 @@ import json
 
 # Get last processed date  
 # If there is no last processed date, use the date of one month before today. 
+# return datetime object instead of date object
 def get_last_processed_date():
     last_processed_file = Path('last_processed_date.txt')
     if last_processed_file.exists():
         with open(last_processed_file, 'r') as file:
-            return datetime.strptime(file.read(), "%Y-%m-%d").date()
+            return datetime.strptime(file.read(), "%Y-%m-%d")
     else:
         print("No last processed date found, using 2 weeks before today.")
         return date.today() - timedelta(days=14)
@@ -57,14 +58,17 @@ def process_file(file_info):
     outfile = Path(key).name.replace('.gz', '.csv')
     outpath = raw_path / outfile
     
-    df = pd.read_json(filename, lines=True, chunksize=10000)
+    df = pd.read_json(filename, lines=True, chunksize=10000, maximum_object_size=100000000, ignore_errors=True)
     
     for chunk in df:
+        chunk['publication_date'] = pd.to_datetime(chunk['publication_date'])
+        filtered_chunk = chunk[chunk['publication_date'] > last_processed_date]
+
         filtered_chunk = chunk[chunk['best_oa_location'].notna()]
         filtered_chunk['url'] = filtered_chunk['best_oa_location'].apply(lambda x: x.get('pdf_url') if isinstance(x, dict) else None)
         filtered_chunk = filtered_chunk[filtered_chunk['url'].notna() & (filtered_chunk['url'] != 'null')]
         
-        result = filtered_chunk[['doi', 'url']]
+        result = filtered_chunk[['doi', 'url', 'publication_date']]
         result.to_csv(outpath, mode='a', header=False, index=False)
 
 
@@ -81,23 +85,26 @@ out.mkdir(exist_ok=True)
 parquet_file = out / 'open_alex_open_acccess_pdfs.parquet'
 
 # Reading existing parquet file
-existing_df = pd.read_parquet(parquet_file, index=False, engine='fastparquet') if parquet_file.exists() else pd.DataFrame(columns=['doi', 'url'])
+existing_df = pd.read_parquet(parquet_file, engine='fastparquet') if parquet_file.exists() else pd.DataFrame(columns=['doi', 'url', 'publication_date'])
 
 
 # Combine data from new csv files   
-new_data = pd.concat([pd.read_csv(f, names=['doi', 'url']) for f in raw_path.glob('*.csv')], ignore_index=True)
+new_data = pd.concat([pd.read_csv(f, names=['doi', 'url', 'publication_date']) for f in raw_path.glob('*.csv')], ignore_index=True)
 
 # Combine existing and new data
 combined_df = pd.concat([existing_df, new_data], ignore_index=True)
-
+combined_df['publication_date'] = pd.to_datetime(combined_df['publication_date'])
+combined_df = combined_df.sort_values('publication_date')
 # Remove duplicates and save to parquet
 combined_df.drop_duplicates(subset=['doi'], keep='last').to_parquet(parquet_file, index=False, engine='fastparquet')
 
 # Update the last processed date
-if filtered_files:
-    last_processed_date = max(date for _, date in filtered_files)
+if not new_data.empty:
+    #last_processed_date = max(date for _, date in filtered_files)
+    last_processed_date = new_data['publication_date'].max().to_pydatetime()
     save_last_processed_date(last_processed_date)
 
-print(f"Processed files up to: {last_processed_date}")
+print(f"Processed files up to: {last_processed_date} (publication date)")
+
 
 

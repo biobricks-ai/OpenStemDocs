@@ -6,6 +6,7 @@ import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 import duckdb
+import json
 import boto3
 from botocore import UNSIGNED
 from botocore.client import Config
@@ -16,7 +17,7 @@ def get_last_processed_date():
     last_processed_file = Path('last_processed_date.txt')
     if last_processed_file.exists():
         with open(last_processed_file, 'r') as file:
-            return datetime.strptime(file.read(), "%Y-%m-%d").date()
+            return datetime.strptime(file.read().strip(), "%Y-%m-%d")
     else:
         print("No last processed date found, using 2 weeks before today.")
         return date.today() - timedelta(days=14)
@@ -59,9 +60,13 @@ def process_file(file_info):
     
     query = f"""
     copy (
-        select doi, best_oa_location->'$.pdf_url' as url 
+        select doi, 
+               json_extract(best_oa_location, '$.pdf_url') as url,
+               cast(publication_date as timestamp) as publication_date
         from read_json('{filename}', ignore_errors=true, maximum_object_size=100000000) 
-        where url is not null and url != 'null' and not url like '%null'
+        where json_extract(best_oa_location, '$.pdf_url') is not null 
+          and json_extract(best_oa_location, '$.pdf_url') != 'null'
+          and cast(publication_date as timestamp) > '{last_processed_date}'
     )
     to '{outpath}' (HEADER false, APPEND)
     """
@@ -82,24 +87,46 @@ out = Path('brick')
 out.mkdir(exist_ok=True)
 conn = duckdb.connect(':memory:')
 parquet_file = out / 'open_alex_open_acccess_pdfs.parquet'
+
 if parquet_file.exists():
+    # Read existing parquet file
+    conn.execute(f"create table existing as select * from parquet_scan('{parquet_file}')")
+
+    # Combine existing and new data
     conn.execute(f"""
-    copy (
-        select * from parquet_scan('{parquet_file}')
-        union all
-        select * from read_csv_auto('{raw_path}/*.csv', union_by_name=true)
-    ) to '{parquet_file}' (format parquet, overwrite_or_ignore)
+    create table combined as
+    select * from existing
+    union all
+    select doi, url, cast(publication_date as timestamp) as publication_date
+    from read_csv_auto('{raw_path}/*.csv', header=false, names=['doi', 'url', 'publication_date'])
     """)
 else:
-    conn.execute(f"copy (select * from read_csv_auto('{raw_path}/*.csv', union_by_name=true)) to '{parquet_file}' (format parquet)")
+    # Create combined table from new data only
+    conn.execute(f"""
+    create table combined as
+    select doi, url, cast(publication_date as timestamp) as publication_date
+    from read_csv_auto('{raw_path}/*.csv', header=false, names=['doi', 'url', 'publication_date'])
+    """)
+
+# Remove duplicates, sort by publication_date, and save to parquet
+conn.execute(f"""
+copy (
+    select distinct on (doi) *
+    from combined
+    order by doi, publication_date desc
+)
+to '{parquet_file}' (format parquet)
+""")
+
+# Update the last processed date
+conn.execute(f"select max(publication_date) as max_date from '{parquet_file}'")
+last_processed_date = conn.fetchone()[0]
+
+if last_processed_date:
+    save_last_processed_date(last_processed_date)
 
 conn.close()
 
-# Update the last processed date
-if filtered_files:
-    last_processed_date = max(date for _, date in filtered_files)
-    save_last_processed_date(last_processed_date)
-
-print(f"Processed files up to: {last_processed_date}")
+print(f"Processed files up to: {last_processed_date} (publication date)")
 
 
