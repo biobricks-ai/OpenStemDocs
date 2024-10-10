@@ -35,19 +35,11 @@ s3_run = f"aws s3 ls --recursive --no-sign-request s3://openalex/data/works/"
 files = subprocess.check_output(s3_run.split(), text=True).splitlines()
 
 # Filter files by last processed date
-#filtered_files = [file for file in files if datetime.strptime(file.split()[1].split('=')[1], "%Y-%m-%d").date() > last_processed_date]
-filtered_files = []
-for file in files:
-    parts = file.split()
-    if len(parts) >= 2:
-        date_str = parts[0]
-        # YYYY-MM-DD
-        if len(date_str) == 10: 
-            file_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-            if file_date > last_processed_date:
-                filtered_files.append(file)
-        else:
-            continue
+filtered_files = [
+    file for file in files 
+    if len(file.split()) >= 2 
+    and datetime.strptime(file.split()[0], "%Y-%m-%d").date() > last_processed_date
+]
 
 # Process each file
 def process_file(file):
