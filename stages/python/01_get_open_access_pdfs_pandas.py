@@ -62,18 +62,6 @@ def process_file(file_info):
     outpath = raw_path / outfile
     
     df = pd.read_json(filename, lines=True, chunksize=10000)
-#    df['url'] = df['best_oa_location'].apply(lambda x: x.get('pdf_url') if isinstance(x, dict) else None)
-#    df['publication_date'] = pd.to_datetime(df['publication_date'])
-
-#    df['url'] = df['url'].str.split(',').str[0].str.strip()
-    
-#    filtered_df = df[(df['url'].notna()) & (df['url'] != 'null') & 
-#        (df['publication_date'] > pd.to_datetime(last_processed_date)) &
-#        (df['doi'].str.contains('doi.org', case=False, na=False))][['doi', 'url', 'publication_date']]
-    
-    # Append the results to the CSV file
-#    filtered_df.to_csv(outpath, mode='a', header=False, index=False)
-
 
     for chunk in df:
         chunk['publication_date'] = pd.to_datetime(chunk['publication_date'])
@@ -96,11 +84,9 @@ with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
 
 
 # Create output (brick) directory and load data into parquet
-# If parquet file exists, append data to it. Otherwise, create new parquet file.
-# UNION ALL combines data from existing parquet file and new csv files.
 out = Path('brick')
 out.mkdir(exist_ok=True)
-parquet_file = out / 'open_alex_open_acccess_pdfs.parquet'
+parquet_file = out / 'open_alex_open_access_pdfs.parquet'
 
 # Reading existing parquet file
 existing_df = pd.read_parquet(parquet_file, engine='fastparquet') if parquet_file.exists() else pd.DataFrame(columns=['doi', 'url', 'publication_date'])
