@@ -20,7 +20,9 @@ def get_last_processed_date():
             return datetime.strptime(file.read().strip(), "%Y-%m-%d")
     else:
         print("No last processed date found, using 2 weeks before today.")
-        return date.today() - timedelta(days=14)
+#        return date.today() - timedelta(days=14)
+        today = date.today()
+        return today.replace(today.year - 4) 
 
 # Save last processed date into a file
 def save_last_processed_date(processed_date):

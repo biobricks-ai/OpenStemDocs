@@ -3,7 +3,7 @@ import glob
 from pathlib import Path
 import subprocess
 import multiprocessing
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 import boto3
 from botocore import UNSIGNED
@@ -21,8 +21,8 @@ def get_last_processed_date():
         with open(last_processed_file, 'r') as file:
             return datetime.strptime(file.read(), "%Y-%m-%d")
     else:
-        print("No last processed date found, using 2 weeks before today.")
-        return date.today() - timedelta(days=14)
+        print("No last processed date found, using 120 days before today.")
+        return date.today() - timedelta(days=120)
 
 # Save last processed date into a file
 def save_last_processed_date(processed_date):
@@ -58,22 +58,37 @@ def process_file(file_info):
     outfile = Path(key).name.replace('.gz', '.csv')
     outpath = raw_path / outfile
     
-    df = pd.read_json(filename, lines=True, chunksize=10000, maximum_object_size=100000000, ignore_errors=True)
+    df = pd.read_json(filename, lines=True, chunksize=10000)
+#    df['url'] = df['best_oa_location'].apply(lambda x: x.get('pdf_url') if isinstance(x, dict) else None)
+#    df['publication_date'] = pd.to_datetime(df['publication_date'])
+
+#    df['url'] = df['url'].str.split(',').str[0].str.strip()
     
+#    filtered_df = df[(df['url'].notna()) & (df['url'] != 'null') & 
+#        (df['publication_date'] > pd.to_datetime(last_processed_date)) &
+#        (df['doi'].str.contains('doi.org', case=False, na=False))][['doi', 'url', 'publication_date']]
+    
+    # Append the results to the CSV file
+#    filtered_df.to_csv(outpath, mode='a', header=False, index=False)
+
+
     for chunk in df:
         chunk['publication_date'] = pd.to_datetime(chunk['publication_date'])
-        filtered_chunk = chunk[chunk['publication_date'] > last_processed_date]
+        chunk['url'] = chunk['best_oa_location'].apply(lambda x: x.get('pdf_url') if isinstance(x, dict) else None)
 
-        filtered_chunk = chunk[chunk['best_oa_location'].notna()]
-        filtered_chunk['url'] = filtered_chunk['best_oa_location'].apply(lambda x: x.get('pdf_url') if isinstance(x, dict) else None)
-        filtered_chunk = filtered_chunk[filtered_chunk['url'].notna() & (filtered_chunk['url'] != 'null')]
+        chunk['url'] = chunk['url'].str.split(',').str[0].str.strip()
+
+        filtered_chunk = chunk[(chunk['url'].notna()) & (chunk['url'] != 'null') & 
+            (chunk['publication_date'] > pd.to_datetime(last_processed_date)) &
+            (chunk['doi'].str.contains('doi.org', case=False, na=False))][['doi', 'url', 'publication_date']]
         
         result = filtered_chunk[['doi', 'url', 'publication_date']]
         result.to_csv(outpath, mode='a', header=False, index=False)
 
 
+
 # Use multiprocessing to process files
-with ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
     executor.map(process_file, filtered_files)
 
 
@@ -89,19 +104,26 @@ existing_df = pd.read_parquet(parquet_file, engine='fastparquet') if parquet_fil
 
 
 # Combine data from new csv files   
-new_data = pd.concat([pd.read_csv(f, names=['doi', 'url', 'publication_date']) for f in raw_path.glob('*.csv')], ignore_index=True)
+#new_data = pd.concat([pd.read_csv(file, names=['doi', 'url', 'publication_date']) for file in raw_path.glob('*.csv')], ignore_index=True)
+new_data = pd.DataFrame()
+for file in raw_path.glob('*.csv'):
+    chunk = pd.read_csv(file, names=['doi', 'url', 'publication_date'])
+    new_data = pd.concat([new_data, chunk], ignore_index=True)
+
 
 # Combine existing and new data
 combined_df = pd.concat([existing_df, new_data], ignore_index=True)
 combined_df['publication_date'] = pd.to_datetime(combined_df['publication_date'])
 combined_df = combined_df.sort_values('publication_date')
 # Remove duplicates and save to parquet
-combined_df.drop_duplicates(subset=['doi'], keep='last').to_parquet(parquet_file, index=False, engine='fastparquet')
+combined_df.drop_duplicates(subset=['doi'], keep='last')
+combined_df.to_parquet(parquet_file, index=False, engine='fastparquet')
+
+
 
 # Update the last processed date
-if not new_data.empty:
-    #last_processed_date = max(date for _, date in filtered_files)
-    last_processed_date = new_data['publication_date'].max().to_pydatetime()
+last_processed_date = combined_df['publication_date'].max()
+if last_processed_date:
     save_last_processed_date(last_processed_date)
 
 print(f"Processed files up to: {last_processed_date} (publication date)")
