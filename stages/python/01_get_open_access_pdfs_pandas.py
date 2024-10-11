@@ -13,8 +13,6 @@ import fastparquet
 import json
 
 # Get last processed date  
-# If there is no last processed date, use the date of one month before today. 
-# return datetime object instead of date object
 def get_last_processed_date():
     last_processed_file = Path('last_processed_date.txt')
     if last_processed_file.exists():
@@ -22,7 +20,6 @@ def get_last_processed_date():
             return datetime.strptime(file.read(), "%Y-%m-%d")
     else:
         print("No last processed date found, using 4 months before today. (just testing)")
-        #return date.today() - timedelta(days=120)today = date.today()
         today = date.today()
         return today.replace(month=today.month - 4) 
 
@@ -53,7 +50,6 @@ filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/')
 
 
 # Process each file
-# APPEND data to existing csv file  
 # Use pandas instead of duckdb  
 def process_file(file_info):
     key, _ = file_info
@@ -104,18 +100,17 @@ for file in raw_path.glob('*.csv'):
 combined_df = pd.concat([existing_df, new_data], ignore_index=True)
 combined_df['publication_date'] = pd.to_datetime(combined_df['publication_date'])
 combined_df = combined_df.sort_values('publication_date')
+
 # Remove duplicates and save to parquet
 combined_df.drop_duplicates(subset=['doi'], keep='last')
 combined_df.to_parquet(parquet_file, index=False, engine='fastparquet')
 
 
+# Update the processed date
+new_processed_date = combined_df['publication_date'].max()
+save_last_processed_date(new_processed_date)
 
-# Update the last processed date
-last_processed_date = combined_df['publication_date'].max()
-if last_processed_date:
-    save_last_processed_date(last_processed_date)
-
-print(f"Processed files up to: {last_processed_date} (publication date)")
+print(f"Processed publications fron {last_processed_date} to: {new_processed_date}")
 
 
 
