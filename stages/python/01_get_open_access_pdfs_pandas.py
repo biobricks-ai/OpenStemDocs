@@ -19,9 +19,9 @@ def get_last_processed_date():
         with open(last_processed_file, 'r') as file:
             return datetime.strptime(file.read(), "%Y-%m-%d")
     else:
-        print("No last processed date found, using 4 months before today. (just testing)")
+        print("No last processed date found, using 5 years before today. (just testing)")
         today = date.today()
-        return today.replace(month=today.month - 4) 
+        return today.replace(year=today.year - 5) 
 
 
 # Save last processed date into a file
