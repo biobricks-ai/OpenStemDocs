@@ -19,9 +19,9 @@ def get_last_processed_date():
         with open(last_processed_file, 'r') as file:
             return datetime.strptime(file.read(), "%Y-%m-%d").date()
     else:
-        print("No last processed date found, using 224 years before today starting from Jan 1 (testing for now)")
+        print("No last processed date found, using 324 years before today starting from Jan 1 (testing for now)")
         today = date.today()
-        start_date = date(today.year - 224, 1, 1)
+        start_date = date(today.year - 324, 1, 1)
         return start_date
 
 
@@ -36,8 +36,11 @@ print(last_processed_date)
 
 
 # Directory of files to process
-raw_path = Path('output')
+raw_path = Path('brick')
 raw_path.mkdir(exist_ok=True)
+
+# Number of output files to split into 
+numfile = 8
 
 # List S3 files
 def s3_run(bucket, prefix):
@@ -48,8 +51,9 @@ def s3_run(bucket, prefix):
         for obj in page.get('Contents', []):
             yield obj['Key'], obj['LastModified'].date()
 
-# Filter files by last processed date
-filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/') if date >= last_processed_date]
+# Filter files by last processed date\
+filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/')]
+#filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/') if date >= last_processed_date]
 
 
 # Process each file 
@@ -58,7 +62,7 @@ def process_file(file_info):
     filename = f"s3://openalex/{key}"
 
     hash_value = hashlib.md5(key.encode()).hexdigest()
-    group = int(hash_value, 16) % 4 
+    group = int(hash_value, 16) % numfile 
 
     outfile = f"group_{group:02d}.parquet"
     outpath = raw_path / outfile
@@ -76,19 +80,17 @@ def process_file(file_info):
 
         
         filtered_chunk = filtered_chunk.drop_duplicates(subset='doi', keep='first')
-        #filtered_chunk = filtered_chunk.drop_duplicates(subset='title', keep='first')
-
 
         if outpath.exists():
-            filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=True)
+            filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=True, index=False)
         else:
-            filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy')
+            filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', index=False)
 
     return 1
 
 
 # Use multiprocessing to process files
-with ProcessPoolExecutor(max_workers=12) as executor:
+with ProcessPoolExecutor(max_workers=numfile) as executor:
     executor.map(process_file, filtered_files)
 
 
@@ -105,11 +107,3 @@ else:
     new_processed_date = last_processed_date
 
 save_last_processed_date(new_processed_date)
-   
-   
-
-
-
-
-
-
