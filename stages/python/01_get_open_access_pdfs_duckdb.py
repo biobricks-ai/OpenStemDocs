@@ -130,5 +130,3 @@ if last_processed_date:
 conn.close()
 
 print(f"Processed files up to: {last_processed_date} (publication date)")
-
-
