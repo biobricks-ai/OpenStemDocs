@@ -20,9 +20,12 @@ def main(parquet_dir):
     latest_date = None
 
     all_dois = defaultdict(list)
+
+    duplicates_per_file = {}
     total_duplicates_within_files = 0
     total_duplicates_across_files = 0
 
+    publications_per_file = {}
     total_files = 0
 
     # Iterate through all parquet files
@@ -30,6 +33,9 @@ def main(parquet_dir):
         df = pd.read_parquet(file)
 
         total_files += len(df)
+
+        total_publications = len(df)
+        publications_per_file[file.name] = total_publications
             
         df['publication_date'] = pd.to_datetime(df['publication_date'])
 
@@ -43,10 +49,15 @@ def main(parquet_dir):
             latest_date = file_latest_date.strftime("%Y-%m-%d")
 
         # Check for duplicates within the current file
+
         duplicates_in_file = df[df['doi'].duplicated(keep=False)]
-        if not duplicates_in_file.empty:
-            duplicate_count = len(duplicates_in_file)
-            total_duplicates_within_files += duplicate_count
+        duplicate_count = len(duplicates_in_file)
+        duplicates_per_file[file.name] = duplicate_count
+        total_duplicates_within_files += duplicate_count        
+
+        #if not duplicates_in_file.empty:
+        #    duplicate_count = len(duplicates_in_file)
+        #    total_duplicates_within_files += duplicate_count
             #print(f"Duplicates found within file {file.name}: {duplicate_count}")
             #print(duplicates_in_file['doi'].value_counts())
 
@@ -66,6 +77,9 @@ def main(parquet_dir):
     print(f"Total duplicates across files: {total_duplicates_across_files}")
     print(f"Total duplicates: {total_duplicates_within_files + total_duplicates_across_files}")
 
+    print("\nNumber of duplicates in each output file:")
+    for (file, duplicates), (_, total_pub) in sorted(zip(duplicates_per_file.items(), publications_per_file.items()), key=lambda x: x[1][1], reverse=True):
+        print(f"{file}: {duplicates} out of {total_pub}")
 
 
 main(args.parquet_dir)
