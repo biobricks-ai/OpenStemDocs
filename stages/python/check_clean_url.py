@@ -27,6 +27,7 @@ def main(parquet_dir):
 
     publications_per_file = {}
     total_files = 0
+    total_now  = 0
 
     # Iterate through all parquet files
     for file in parquet_files:
