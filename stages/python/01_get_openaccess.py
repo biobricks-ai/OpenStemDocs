@@ -64,7 +64,7 @@ def process_file(file_info):
     hash_value = hashlib.md5(key.encode()).hexdigest()
     group = int(hash_value, 16) % numfile 
 
-    outfile = f"group_{group:02d}.parquet"
+    outfile = f"url_{group:02d}.parquet"
     outpath = raw_path / outfile
     
     df = pd.read_json(filename, lines=True, chunksize=10000000)
@@ -80,6 +80,8 @@ def process_file(file_info):
 
         
         filtered_chunk = filtered_chunk.drop_duplicates(subset='doi', keep='first')
+        #filtered_chunk = filtered_chunk.drop_duplicates(subset='title', keep='first')
+
 
         if outpath.exists():
             filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=True, index=False)
