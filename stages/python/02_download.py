@@ -1,6 +1,7 @@
 import hashlib
 import requests
 import pandas as pd
+import fastparquet
 from pathlib import Path
 import PyPDF2
 import re
@@ -8,23 +9,22 @@ import re
 scraperapi_key = "KEY"
 
 def download_pdf(url, output_dir):
-    #response = requests.get(url)
     response = requests.get(f"http://api.scraperapi.com?api_key={scraperapi_key}&url={url}&render=true")
     if response.status_code == 200 and response.headers.get('content-type', '').lower() == 'application/pdf':
         content = response.content
         content_hash = hashlib.md5(content).hexdigest()
         filename = f"{content_hash}.pdf"
-        file_path = output_dir / filename
-        with file_path.open('wb') as f:
-            f.write(content)
+        outfile_path = output_dir / filename
+        with outfile_path.open('wb') as file:
+            file.write(content)
 
 
-        with file_path.open('rb') as f:
-            reader = PyPDF2.PdfReader(f)
+        with out_path.open('rb') as file:
+            reader = PyPDF2.PdfReader(file)
             if len(reader.pages) > 0:
                 return file_path, content_hash
 
-        file_path.unlink()
+        out_path.unlink()
     
     return None, None
 
@@ -44,7 +44,6 @@ def extract_metadata(doi):
 input_dir = Path('brick')
 output_dir = Path('brick/pdf')
 output_dir.mkdir(parents=True, exist_ok=True)
-#output_parquet = Path('brick/pdf/pdfs.parquet')
 
 for file in input_dir.glob('*.parquet'):
     df = pd.read_parquet(file)
