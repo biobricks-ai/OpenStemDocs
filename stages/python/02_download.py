@@ -31,7 +31,6 @@ def download_pdf(url, output_dir):
 
 def extract_metadata(doi):
     base_url = "https://api.crossref.org/works/"
-    #response = requests.get(f"{base_url}{doi}")
     response = requests.get(f"http://api.scraperapi.com",params={"api_key":scraperapi_key,"url":f"{base_url}{doi}"})
     if response.status_code == 200:
         data = response.json()['message']
@@ -42,26 +41,29 @@ def extract_metadata(doi):
         return {'title': title, 'journal': journal, 'author': author}
     return {'title': None, 'journal': None, 'author': None}    
 
-input_file = Path('test/test.parquet')
-output_dir = Path('test/pdf')
+input_dir = Path('brick')
+output_dir = Path('brick/pdf')
 output_dir.mkdir(parents=True, exist_ok=True)
-output_parquet = Path('test/test_pdfs.parquet')
+#output_parquet = Path('brick/pdf/pdfs.parquet')
 
-df = pd.read_parquet(input_file)
-urls = df['url'].tolist()
-dois = df['doi'].tolist()
-publication_date = df['publication_date'].tolist()
+for file in input_dir.glob('*.parquet'):
+    df = pd.read_parquet(file)
+    urls = df['url'].tolist()
+    dois = df['doi'].tolist()
+    publication_date = df['publication_date'].tolist()
 
-metadata_list = []
-downloaded_hashes = set()
+    metadata_list = []
+    downloaded_hashes = set()
 
-for url, doi, pub in zip(urls, dois, publication_date):
-    file_path, content_hash = download_pdf(url, output_dir)
-    if file_path and content_hash not in downloaded_hashes:
-        metadata = extract_metadata(doi)
-        year = pd.to_datetime(pub).year if pd.notna(pub) else None
-        metadata_list.append({'doi': doi, 'url': url, 'file_path': str(file_path), 'content_hash': content_hash, 'year': year, **metadata})
-        downloaded_hashes.add(content_hash)
+    for url, doi, pub in zip(urls, dois, publication_date):
+        file_path, content_hash = download_pdf(url, output_dir)
+        if file_path and content_hash not in downloaded_hashes:
+            metadata = extract_metadata(doi)
+            year = pd.to_datetime(pub).year if pd.notna(pub) else None
+            metadata_list.append({'doi': doi, 'url': url, 'file_path': str(file_path), 'content_hash': content_hash, 'year': year, **metadata})
+            downloaded_hashes.add(content_hash)
 
-metadata_df = pd.DataFrame(metadata_list)
-metadata_df.to_parquet(output_parquet, index=False)
+
+    metadata_df = pd.DataFrame(metadata_list)
+    output_parquet = file.stem + '_pdfs.parquet'
+    metadata_df.to_parquet(Path('brick/pdf') / output_parquet, index=False)
