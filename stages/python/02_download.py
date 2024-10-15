@@ -5,8 +5,9 @@ import fastparquet
 from pathlib import Path
 import PyPDF2
 import re
+from concurrent.futures import ThreadPoolExecutor
 
-scraperapi_key = "KEY"
+scraperapi_key = "ENTER KEY"
 
 def download_pdf(url, output_dir):
     response = requests.get(f"http://api.scraperapi.com?api_key={scraperapi_key}&url={url}&render=true")
@@ -34,17 +35,20 @@ def extract_metadata(doi):
     response = requests.get(f"http://api.scraperapi.com",params={"api_key":scraperapi_key,"url":f"{base_url}{doi}"})
     if response.status_code == 200:
         data = response.json()['message']
-        title = data.get('title', [None])[0]
+        title = data.get('title', [None])
+        title = title[0] if isinstance(title, list) and title else None
         journal = data.get('container-title', [])
         journal = journal[0] if journal else None
         authors = data.get('author', [])
-        all_authors = ', '.join([f"{author['given']} {author['family']}" for author in authors]) if authors else None
+        all_authors = ', '.join([f"{author.get('given', '')} {author.get('family', '')}".strip() for author in authors]) if authors else None
         return {'title': title, 'journal': journal, 'author': all_authors}
     return {'title': None, 'journal': None, 'author': None}    
 
-input_dir = Path('brick')
-output_dir = Path('brick/pdf')
+input_dir = Path('brick_v0')
+output_dir = Path('brick_v0/pdf0')
 output_dir.mkdir(parents=True, exist_ok=True)
+
+numfile = len(list(input_dir.glob('*.parquet')))
 
 for file in input_dir.glob('*.parquet'):
     df = pd.read_parquet(file)
@@ -55,15 +59,25 @@ for file in input_dir.glob('*.parquet'):
     metadata_list = []
     downloaded_hashes = set()
 
-    for url, doi, pub in zip(urls, dois, publication_date):
-        file_path, content_hash = download_pdf(url, output_dir)
-        if file_path and content_hash not in downloaded_hashes:
-            metadata = extract_metadata(doi)
-            year = pd.to_datetime(pub).year if pd.notna(pub) else None
-            metadata_list.append({'doi': doi, 'url': url, 'file_path': str(file_path), 'content_hash': content_hash, 'year': year, **metadata})
-            downloaded_hashes.add(content_hash)
+    with ThreadPoolExecutor(max_workers=numfile) as executor:
+        results = executor.map(
+            lambda url_doi_pub: (url_doi_pub[0], url_doi_pub[1], 
+                *download_pdf(url_doi_pub[0], output_dir), 
+                pd.to_datetime(url_doi_pub[2]).year if pd.notna(url_doi_pub[2]) else None,
+                *extract_metadata(url_doi_pub[1]).values()
+            ), 
+            zip(urls, dois, publication_date)
+        )
+
+    for result in results:
+        if result and result[3] not in downloaded_hashes: 
+            metadata_list.append({'doi': result[1], 'url': result[0], 'file_path': str(result[2]),
+                'content_hash': result[3], 'year': result[4], 'title': result[5],
+                'journal': result[6], 'author': result[7]
+            })
+            downloaded_hashes.add(result[3])
 
 
     metadata_df = pd.DataFrame(metadata_list)
     output_parquet = file.stem + '_pdfs.parquet'
-    metadata_df.to_parquet(Path('brick/pdf') / output_parquet, index=False)
+    metadata_df.to_parquet(output_dir / output_parquet, index=False)
