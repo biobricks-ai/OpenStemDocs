@@ -44,8 +44,8 @@ def extract_metadata(doi):
         return {'title': title, 'journal': journal, 'author': all_authors}
     return {'title': None, 'journal': None, 'author': None}    
 
-input_dir = Path('brick_v0')
-output_dir = Path('brick_v0/pdf0')
+input_dir = Path('brick')
+output_dir = Path('brick/pdfs')
 output_dir.mkdir(parents=True, exist_ok=True)
 
 numfile = len(list(input_dir.glob('*.parquet')))
