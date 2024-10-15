@@ -19,12 +19,12 @@ def download_pdf(url, output_dir):
             file.write(content)
 
 
-        with out_path.open('rb') as file:
+        with outfile_path.open('rb') as file:
             reader = PyPDF2.PdfReader(file)
             if len(reader.pages) > 0:
-                return file_path, content_hash
+                return outfile_path, content_hash
 
-        out_path.unlink()
+        outfile_path.unlink()
     
     return None, None
 
@@ -37,8 +37,8 @@ def extract_metadata(doi):
         title = data.get('title', [None])[0]
         journal = data.get('container-title', [None])[0]
         authors = data.get('author', [])
-        author = f"{authors[0]['given']} {authors[0]['family']}" if authors else None
-        return {'title': title, 'journal': journal, 'author': author}
+        all_authors = ', '.join([f"{author['given']} {author['family']}" for author in authors]) if authors else None
+        return {'title': title, 'journal': journal, 'author': all_authorsauthor}
     return {'title': None, 'journal': None, 'author': None}    
 
 input_dir = Path('brick')
