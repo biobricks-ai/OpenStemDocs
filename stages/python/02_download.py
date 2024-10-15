@@ -35,10 +35,11 @@ def extract_metadata(doi):
     if response.status_code == 200:
         data = response.json()['message']
         title = data.get('title', [None])[0]
-        journal = data.get('container-title', [None])[0]
+        journal = data.get('container-title', [])
+        journal = journal[0] if journal else None
         authors = data.get('author', [])
         all_authors = ', '.join([f"{author['given']} {author['family']}" for author in authors]) if authors else None
-        return {'title': title, 'journal': journal, 'author': all_authorsauthor}
+        return {'title': title, 'journal': journal, 'author': all_authors}
     return {'title': None, 'journal': None, 'author': None}    
 
 input_dir = Path('brick')
