@@ -12,7 +12,9 @@ import pandas as pd
 import fastparquet
 import json
 
-# Get last processed date  
+
+#### Define functions #####
+# Get last processed date if applicable
 def get_last_processed_date():
     last_processed_file = Path('last_processed_date.txt')
     if last_processed_file.exists():
@@ -24,25 +26,7 @@ def get_last_processed_date():
         start_date = date(today.year - 324, 1, 1)
         return start_date
 
-
-# Save last processed date into a file
-def save_last_processed_date(processed_date):
-    with open('last_processed_date.txt', 'w') as file:
-        file.write(processed_date.strftime("%Y-%m-%d"))
-
-# Use previous two months from today as the last processed date
-last_processed_date = get_last_processed_date()
-print(last_processed_date)
-
-
-# Directory of files to process
-raw_path = Path('brick')
-raw_path.mkdir(exist_ok=True)
-
-# Number of output files to split into 
-numfile = 8
-
-# List S3 files
+# Connect to AWS s3 and retrieve data
 def s3_run(bucket, prefix):
     s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
     paginator = s3.get_paginator('list_objects_v2')
@@ -51,12 +35,7 @@ def s3_run(bucket, prefix):
         for obj in page.get('Contents', []):
             yield obj['Key'], obj['LastModified'].date()
 
-# Filter files by last processed date\
-filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/')]
-#filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/') if date >= last_processed_date]
-
-
-# Process each file 
+# Extract url and process each file 
 def process_file(file_info):
     key, _ = file_info
     filename = f"s3://openalex/{key}"
@@ -80,8 +59,6 @@ def process_file(file_info):
 
         
         filtered_chunk = filtered_chunk.drop_duplicates(subset='doi', keep='first')
-        #filtered_chunk = filtered_chunk.drop_duplicates(subset='title', keep='first')
-
 
         if outpath.exists():
             filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=True, index=False)
@@ -91,7 +68,30 @@ def process_file(file_info):
     return 1
 
 
-# Use multiprocessing to process files
+# Save last processed date into a file
+def save_last_processed_date(processed_date):
+    with open('last_processed_date.txt', 'w') as file:
+        file.write(processed_date.strftime("%Y-%m-%d"))
+
+
+
+#### Execution ######
+
+# retrieve last processed date or its arbitrary date
+last_processed_date = get_last_processed_date()
+print(last_processed_date)
+
+# Create directory for the processed data
+raw_path = Path('brick')
+raw_path.mkdir(exist_ok=True)
+
+# Number of output files to split into (can be more or less)
+numfile = 8
+
+# Filter files by last processed date
+filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/') if date >= last_processed_date]
+
+# Process files using multiprocessors
 with ProcessPoolExecutor(max_workers=numfile) as executor:
     executor.map(process_file, filtered_files)
 
