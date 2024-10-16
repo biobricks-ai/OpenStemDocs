@@ -4,13 +4,14 @@ import fastparquet
 from collections import defaultdict
 import argparse
 
+# find and remove duplicates within or across individual files
 
 parser = argparse.ArgumentParser(description="Checking duplicate DOIs")
 parser.add_argument("parquet_dir", help="Path to parquet files")
 args = parser.parse_args()
 
 
-def main(parquet_dir):
+def remove_duplicates(parquet_dir):
     parquet_dir = Path(parquet_dir)
     parquet_files = parquet_dir.glob('*.parquet')
 
@@ -49,10 +50,7 @@ def main(parquet_dir):
 
         df_drop.to_parquet(file, index=False)
 
-    total_duplicates_across_files = len(seen_dois) - len(set(df['doi'] for df in parquet_files))
+    print("\nDuplicate doi have been removed.")
 
 
-    print("\nRemoved duplicates within and across files")
-
-
-main(args.parquet_dir)
+remove_duplicates(args.parquet_dir)

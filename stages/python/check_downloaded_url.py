@@ -4,15 +4,16 @@ import fastparquet
 from collections import defaultdict
 import argparse
 
+# Go through individual parquet files containing retrieved doi and url
 # Get total number of publications from the oldest to the latest date
-# Check for duplicates within files and across files    
+# Check if there are duplicates within files or across files      
 
 parser = argparse.ArgumentParser(description="Checking duplicate DOIs")
 parser.add_argument("parquet_dir", help="Path to parquet files")
 args = parser.parse_args()
 
 
-def main(parquet_dir):
+def check_downloaded_url(parquet_dir):
     parquet_dir = Path(parquet_dir)
     parquet_files = parquet_dir.glob('*.parquet')
 
@@ -82,4 +83,4 @@ def main(parquet_dir):
         print(f"{file}: {duplicates} out of {total_pub}")
 
 
-main(args.parquet_dir)
+check_downloaded_url(args.parquet_dir)
