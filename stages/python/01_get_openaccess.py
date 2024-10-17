@@ -46,22 +46,55 @@ def process_file(file_info):
     outfile = f"url_{group:02d}.parquet"
     outpath = raw_path / outfile
     
-    df = pd.read_json(filename, lines=True, chunksize=10000000)
+    df = pd.read_json(filename, lines=True, chunksize=50000000)
 
     for chunk in df:
         chunk['publication_date'] = pd.to_datetime(chunk['publication_date'])
         chunk['url'] = chunk['best_oa_location'].apply(lambda x: x.get('pdf_url') if isinstance(x, dict) else None)
         chunk['url'] = chunk['url'].str.split(',').str[0].str.strip()
-
-        filtered_chunk = chunk[(chunk['url'].notna()) & (chunk['url'] != 'null') & 
-            (chunk['publication_date'] >= pd.to_datetime(last_processed_date)) &
-            (chunk['doi'].str.contains('doi.org', case=False, na=False))][['doi', 'url', 'publication_date']]
-
         
+        # if publication is open access
+        chunk['is_oa'] = chunk['open_access'].apply(lambda x: x.get('is_oa') if isinstance(x, dict) else None)
+        
+        # extract journal name, authors, topic areas and themes, and keywords
+        chunk['journal_name'] = chunk['primary_location'].apply(lambda x: x.get('source', {}).get('display_name') if isinstance(x, dict) else None)
+        chunk['authors'] = chunk['authorships'].apply(lambda x: ', '.join([author['author']['display_name'] for author in x]) if isinstance(x, list) else None)
+        chunk['themes'] = chunk['topics'].apply(lambda x: ', '.join([topic['display_name'] for topic in x]) if isinstance(x, list) else None)
+        chunk['keywd'] = chunk['keywords'].apply(lambda x: ', '.join([keyword['display_name'] for keyword in x]) if isinstance(x, list) else None)
+        chunk['areas'] = chunk['topics'].apply(lambda x: ', '.join(topic['field']['display_name'] for topic in x if isinstance(topic, dict) and 'field' in topic and 'display_name' in topic['field']) if isinstance(x, list) else None)
+
+        # extract volume and issue
+        for col in ['volume', 'issue']:
+            chunk[col] = chunk['biblio'].apply(lambda x: x.get(col) if isinstance(x, dict) else None)
+
+        # filtering condition
+        conditions = (chunk[(chunk['url'].notna()) & (chunk['url'] != 'null') & 
+            (chunk['publication_date'] >= pd.to_datetime(last_processed_date)) &
+            (chunk['doi'].str.contains('doi.org', case=False, na=False)) &
+            (chunk['title'].notna()) & (chunk['title'] != 'null') &
+            (chunk['authors'].notna()) & (chunk['authors'] != 'null') &
+            (chunk['is_retracted'] == False) & 
+            (chunk['is_paratext'] == False))
+
+        # metadata features
+        selected_columns = [
+            'id', 'doi', 'url','type', 'type_crossref', 
+            'publication_date', 'journal_name', 'title', 
+            'is_oa', 'authors', 'areas', 'themes', 'keywd', 'volume', 
+            'issue', 'language'
+        ]
+
+        filtered_chunk = chunk[conditions][selected_columns]
+
         filtered_chunk = filtered_chunk.drop_duplicates(subset='doi', keep='first')
 
+        #noticed a couple files ran into errors right at the beginning
+        #problems solved after overwritting them (nothing happened afterward)
         if outpath.exists():
-            filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=True, index=False)
+            try:
+                filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=True, index=False)
+            except Exception:
+                filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=False, index=False)
         else:
             filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', index=False)
 
@@ -90,9 +123,11 @@ numfile = 8
 
 # Filter files by last processed date
 filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/') if date >= last_processed_date]
+#data = [(key, date) for key, date in s3_run('openalex', 'data/works/')]
 
 # Process files using multiprocessors
 with ProcessPoolExecutor(max_workers=numfile) as executor:
+#    executor.map(process_file, data)
     executor.map(process_file, filtered_files)
 
 
