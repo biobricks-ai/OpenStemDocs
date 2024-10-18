@@ -11,7 +11,7 @@ from botocore.client import Config
 import pandas as pd
 import fastparquet
 import json
-
+import shutil
 
 #### Define functions #####
 # Get last processed date if applicable
@@ -46,7 +46,7 @@ def process_file(file_info):
     outfile = f"url_{group:02d}.parquet"
     outpath = raw_path / outfile
     
-    df = pd.read_json(filename, lines=True, chunksize=10000000)
+    df = pd.read_json(filename, lines=True, chunksize=1000000)
 
     for chunk in df:
         chunk['publication_date'] = pd.to_datetime(chunk['publication_date'])
@@ -57,7 +57,6 @@ def process_file(file_info):
         chunk['is_oa'] = chunk['open_access'].apply(lambda x: x.get('is_oa') if isinstance(x, dict) else None)
         
         # extract journal name, authors, topic areas and themes, and keywords
-        #chunk['journal_name'] = chunk['primary_location'].apply(lambda x: x.get('source', {}).get('display_name') if isinstance(x, dict) else None)
         chunk['authors'] = chunk['authorships'].apply(lambda x: ', '.join([author['author']['display_name'] for author in x]) if isinstance(x, list) else None)
         chunk['themes'] = chunk['topics'].apply(lambda x: ', '.join([topic['display_name'] for topic in x]) if isinstance(x, list) else None)
         chunk['keywd'] = chunk['keywords'].apply(lambda x: ', '.join([keyword['display_name'] for keyword in x]) if isinstance(x, list) else None)
@@ -84,18 +83,26 @@ def process_file(file_info):
 
         filtered_chunk = filtered_chunk.drop_duplicates(subset='doi', keep='first')
 
-        #noticed a couple files ran into errors, probably corrupted, right when starting the run.
-        #problems solved after overwritting them (nothing happened afterward, looked like it was stuck only in the beginning)
+
+        # checking the files and handling corrupted ones
         if outpath.exists():
-            try:
-                filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=True, index=False)
-            except Exception:
-                filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=False, index=False)
+            existing_data = pd.read_parquet(outpath) if outpath.exists() else None
+
+            if existing_data is None:
+                backup_path = outpath.with_suffix('*.bak')
+                shutil.copy(outpath, backup_path)
+
+                if backup_path.exists():
+                    existing_data = pd.read_parquet(backup_path) if backup_path.exists() else None
+
+            if existing_data is None:
+                filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', index=False)
+                continue
+
         else:
             filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', index=False)
 
-    return 1
-
+        filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=True, index=False)
 
 # Save last processed date into a file
 def save_last_processed_date(processed_date):
@@ -145,7 +152,7 @@ raw_path = Path('brick')
 raw_path.mkdir(exist_ok=True)
 
 # Number of output files to split into (can be more or less)
-numfile = 8
+numfile = 10
 
 # Filter files by last processed date
 filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/') if date >= last_processed_date]
