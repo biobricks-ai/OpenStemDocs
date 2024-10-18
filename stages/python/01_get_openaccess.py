@@ -13,6 +13,8 @@ import fastparquet
 import json
 import shutil
 
+#file_lock = multiprocessing.Lock()
+
 #### Define functions #####
 # Get last processed date if applicable
 def get_last_processed_date():
@@ -84,25 +86,23 @@ def process_file(file_info):
         filtered_chunk = filtered_chunk.drop_duplicates(subset='doi', keep='first')
 
 
-        # checking the files and handling corrupted ones
+        # handling issues with corrupted files and cases when to add new data
+
+        temp_outpath = outpath.with_suffix('.tmp')  
         if outpath.exists():
-            existing_data = pd.read_parquet(outpath) if outpath.exists() else None
-
-            if existing_data is None:
-                backup_path = outpath.with_suffix('*.bak')
-                shutil.copy(outpath, backup_path)
-
-                if backup_path.exists():
-                    existing_data = pd.read_parquet(backup_path) if backup_path.exists() else None
-
-            if existing_data is None:
-                filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', index=False)
-                continue
-
+            try:
+                existing_data = pd.read_parquet(outpath)
+            except Exception:
+                outpath.unlink()
+                existing_data = pd.DataFrame()
+            combined_data = pd.concat([existing_data, filtered_chunk]).drop_duplicates(subset='doi', keep='first')
         else:
-            filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', index=False)
+            combined_data = filtered_chunk
 
-        filtered_chunk.to_parquet(outpath, engine='fastparquet', compression='snappy', append=True, index=False)
+        combined_data.to_parquet(temp_outpath, engine='fastparquet', compression='snappy', index=False)
+
+        if temp_outpath.exists():
+            temp_outpath.rename(outpath) 
 
 # Save last processed date into a file
 def save_last_processed_date(processed_date):
@@ -152,7 +152,7 @@ raw_path = Path('brick')
 raw_path.mkdir(exist_ok=True)
 
 # Number of output files to split into (can be more or less)
-numfile = 10
+numfile = 8
 
 # Filter files by last processed date
 filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/') if date >= last_processed_date]
@@ -160,7 +160,6 @@ filtered_files = [(key, date) for key, date in s3_run('openalex', 'data/works/')
 
 # Process files using multiprocessors
 with ProcessPoolExecutor(max_workers=numfile) as executor:
-#    executor.map(process_file, data)
     executor.map(process_file, filtered_files)
 
 
@@ -179,5 +178,5 @@ else:
 save_last_processed_date(new_processed_date)
 
 
-# Check the output parquet files and removed duplicates
+# Check the output parquet files and remove duplicates
 remove_duplicates(raw_path)
