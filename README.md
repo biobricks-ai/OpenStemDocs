@@ -8,10 +8,10 @@ cd newbrick
 ```
 
 2. Edit stages according to your needs:
-    Scripts:
+    **Scripts:** <br/> 
     ``stages/01_get_openaccess.py`` : 
 	 - currently writting into 8 parquet output files 
-	 - updates new data into a file without rewriting the entire file 
+	 - updates new data into a file without rewriting the entire file <br/> 
     ``stages/02_download.py`` : 
 	 - downloads pdf files 
 	 - writes new metadata files containing information of the downloaded articles
