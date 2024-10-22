@@ -9,12 +9,13 @@ cd newbrick
 
 2. Edit stages according to your needs:
     Recommended scripts:
-    - ``01_download.sh``
-    - ``02_unzip.sh``
-    - ``03_build.sh`` calling a function to process individual files like ``csv2parquet.R`` or ``csv2parquet.py``
+    - ``01_get_openaccess.py`` : currently writting into 8 parquet output files 
+    - ``02_download.py`` : can be modified for parallel runs  
 
-3. Replace stages in dvc.yaml with your new stages
-    
+3. Replace stages in dvc.yaml with your new stages 
+    Modify according to your needs (multiple output directories or parallel runs) 
+
+
 4. Build your brick
 ```
 dvc repro # runs new stages
