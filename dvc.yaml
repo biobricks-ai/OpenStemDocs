@@ -1,37 +1,23 @@
-# Brick DVC stages
-# See https://dvc.org/doc/user-guide/project-structure/dvcyaml-files#pipelines-files-dvcyaml
-
-# The complete process can be executed using:
-# dvc repro
-# If you want to force redoing the process use 
-# dvc repro -f
-# Individual stage can be executed using: 
-# dvc repro <stage>
-
 stages:
-  status:
-    cmd: python3 stages/00_status.py
-  load_urls:
-    cmd: stages/01_load_urls.sh
+  loadurls:
+    cmd: python stages/01_get_openaccess.py
     deps:
-      - stages/01_load_urls.sh
+    - stages/01_get_openaccess.py
     outs:
-      - meta:
-         persist: true
-      - raw:
-         persist: true
-  download: 
-    cmd: stages/02_download.sh
+    - brick:
+        persist: true
+  download:
+    cmd: python stages/02_download.py
     deps:
-      - stages/02_download.sh
-      - raw
+    - stages/brick/url_00.parquet
+    - stages/brick/url_01.parquet
+    - stages/brick/url_02.parquet
+    - stages/brick/url_03.parquet
+    - stages/brick/url_04.parquet
+    - stages/brick/url_05.parquet
+    - stages/brick/url_06.parquet
+    - stages/brick/url_07.parquet
     outs:
-      - pdfs:
-          persist: true
-      - log.json
-  check_pdfs:
-    cmd: stages/03_verify.sh
-    deps:
-      - stages/03_verify.sh
-      - pdfs
-      - log.json
+    - pdfs:
+        persist: True
+
