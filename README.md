@@ -9,10 +9,10 @@ cd newbrick
 
 2. Edit stages according to your needs:
     Scripts:
-    - ``stages/01_get_openaccess.py`` : 
+    ``stages/01_get_openaccess.py`` : 
 	 - currently writting into 8 parquet output files 
 	 - updates new data into a file without rewriting the entire file 
-    - ``stages/02_download.py`` : 
+    ``stages/02_download.py`` : 
 	 - downloads pdf files 
 	 - writes new metadata files containing information of the downloaded articles
 	 - restarts from previously downloaded pdf  
@@ -20,7 +20,7 @@ cd newbrick
 
 3. Replace stages in dvc.yaml with your new stages 
     - Please modify according to your needs (e.g., multiple output directories or parallel runs) 
-    - See dvc_parallel.yaml and run_parallel.sh as example
+    - See ``dvc_parallel.yaml`` and ``run_parallel.sh`` as example
 
 4. Build your brick
 ```
