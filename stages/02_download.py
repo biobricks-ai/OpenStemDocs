@@ -18,14 +18,14 @@ metadata_columns = [
 
 ##### Functions #####
 
-# Load existing metadata from a Parquet file
+# Load existing metadata from a parquet file if applicable
 def load_existing_metadata(output_dir, file_stem):
     existing_file = output_dir / f"{file_stem}_pdfs.parquet"
     if existing_file.exists():
         return pd.read_parquet(existing_file)
     return pd.DataFrame(columns=metadata_columns)
 
-# Save new metadata to a Parquet file
+# Save new metadata to a parquet file
 def save_metadata(metadata_df, output_dir, file_stem):
     output_file = output_dir / f"{file_stem}_pdfs.parquet"
     if output_file.exists():
@@ -106,7 +106,8 @@ numfile = len(list(input_dir.glob('*.parquet')))
 
 # process each file
 for file in input_dir.glob('*.parquet'):
-    df = pd.read_parquet(file)[:10000]
+    # read parquet file (can be adjusted to read only a subset of the file)
+    df = pd.read_parquet(file)
 
     # Get the latest row where content_hash is assigned
     existing_metadata = load_existing_metadata(output_dir, file.stem)
@@ -132,7 +133,6 @@ for file in input_dir.glob('*.parquet'):
                 doi_url[1], 
                 doi_url[0], 
                 *download_pdf(doi_url[1], output_dir, downloaded_hashes), 
-                #*(extract_metadata(doi_url[0]).values() if extract_metadata(doi_url[0]) is not None else [None, None])
                 *(extract_metadata(doi_url[0]) or [None, None])
             ),
             zip(dois, urls)
