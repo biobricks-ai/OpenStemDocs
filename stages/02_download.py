@@ -8,7 +8,7 @@ import pypdf
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 
-scraperapi_key = "ec9bd6410d27cd9544ffd38f6fc6f463"
+scraperapi_key = "Enter Api Key"
 
 metadata_columns = [
     'id', 'doi', 'url', 'type', 'type_crossref', 'publication_date', 'journal', 'publisher', 
