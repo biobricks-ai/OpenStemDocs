@@ -8,7 +8,7 @@ import pypdf
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 
-scraperapi_key = "Api Key"
+scraperapi_key = "ec9bd6410d27cd9544ffd38f6fc6f463"
 
 metadata_columns = [
     'id', 'doi', 'url', 'type', 'type_crossref', 'publication_date', 'journal', 'publisher', 
@@ -39,12 +39,13 @@ def save_metadata(metadata_df, output_dir, file_stem):
 # download pdf from url
 def download_pdf(url, output_dir, downloaded_hashes):
     response = requests.get(f"http://api.scraperapi.com?api_key={scraperapi_key}&url={url}&render=true")
+        
     if response.status_code == 200 and (
         'application/pdf' in response.headers.get('content-type', '').lower() or
         'application/octet-stream' in response.headers.get('content-type', '').lower()):
         content = response.content
         content_hash = hashlib.md5(content).hexdigest()
-        
+            
         if content_hash in downloaded_hashes:
             return None, None
 
@@ -105,7 +106,7 @@ numfile = len(list(input_dir.glob('*.parquet')))
 
 # process each file
 for file in input_dir.glob('*.parquet'):
-    df = pd.read_parquet(file)[:7500]
+    df = pd.read_parquet(file)[:10000]
 
     # Get the latest row where content_hash is assigned
     existing_metadata = load_existing_metadata(output_dir, file.stem)
@@ -125,7 +126,7 @@ for file in input_dir.glob('*.parquet'):
     downloaded_hashes = set(existing_metadata['content_hash'].tolist())  
     results_list = []
 
-    with ThreadPoolExecutor(max_workers=numfile * 2) as executor:
+    with ThreadPoolExecutor(max_workers=numfile * 3) as executor:
         results = list(tqdm(executor.map(
             lambda doi_url: (
                 doi_url[1], 
