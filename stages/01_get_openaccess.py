@@ -18,7 +18,7 @@ import shutil
 
 # Get last processed date if applicable
 def get_last_processed_date():
-    last_processed_file = Path('stages/last_processed_date.txt')
+    last_processed_file = Path('last_processed_date.txt')
     if last_processed_file.exists():
         with open(last_processed_file, 'r') as file:
             return datetime.strptime(file.read(), "%Y-%m-%d").date()
@@ -106,7 +106,7 @@ def process_file(file_info):
 
 # Save last processed date into a file
 def save_last_processed_date(processed_date):
-    with open('stages/last_processed_date.txt', 'w') as file:
+    with open('last_processed_date.txt', 'w') as file:
         file.write(processed_date.strftime("%Y-%m-%d"))
 
 
