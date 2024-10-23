@@ -13,12 +13,12 @@ import fastparquet
 import json
 import shutil
 
-#file_lock = multiprocessing.Lock()
 
-#### Define functions #####
+#####vFunctions #####
+
 # Get last processed date if applicable
 def get_last_processed_date():
-    last_processed_file = Path('last_processed_date.txt')
+    last_processed_file = Path('stages/last_processed_date.txt')
     if last_processed_file.exists():
         with open(last_processed_file, 'r') as file:
             return datetime.strptime(file.read(), "%Y-%m-%d").date()
@@ -106,14 +106,11 @@ def process_file(file_info):
 
 # Save last processed date into a file
 def save_last_processed_date(processed_date):
-    with open('last_processed_date.txt', 'w') as file:
+    with open('stages/last_processed_date.txt', 'w') as file:
         file.write(processed_date.strftime("%Y-%m-%d"))
 
 
 # Check the output parquet files and removed duplicates
-
-
-#### Execution ######
 def remove_duplicates(parquet_dir):
     parquet_dir = Path(parquet_dir)
     parquet_files = parquet_dir.glob('*.parquet')
@@ -142,13 +139,14 @@ def remove_duplicates(parquet_dir):
     print("\nDuplicate doi have been removed.")
 
 
+##### Execution #####
 
 # retrieve last processed date or its arbitrary date
 last_processed_date = get_last_processed_date()
 print(last_processed_date)
 
 # Create directory for the processed data
-raw_path = Path('brick')
+raw_path = Path('brick/articles.parquet')
 raw_path.mkdir(exist_ok=True)
 
 # Number of output files to split into (can be more or less)

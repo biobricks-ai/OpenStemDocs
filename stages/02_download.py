@@ -99,7 +99,7 @@ def extract_metadata(doi):
 ##### Execution #####
 
 # input and output directories
-input_dir = Path('stages/brick')
+input_dir = Path('stages/brick/articles.parquet')
 output_dir = Path('stages/brick/pdfs')
 output_dir.mkdir(parents=True, exist_ok=True)
 
