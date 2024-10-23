@@ -14,7 +14,7 @@ import json
 import shutil
 
 
-#####vFunctions #####
+#####Functions #####
 
 # Get last processed date if applicable
 def get_last_processed_date():
@@ -82,12 +82,9 @@ def process_file(file_info):
             (chunk['authors'].notna()) & (chunk['authors'] != 'null') &
             (chunk['is_retracted'] == False) & (chunk['is_paratext'] == False)][selected_columns]
 
-
         filtered_chunk = filtered_chunk.drop_duplicates(subset='doi', keep='first')
 
-
         # handling issues with corrupted files and cases when to add new data
-
         temp_outpath = outpath.with_suffix('.tmp')  
         if outpath.exists():
             try:
@@ -103,11 +100,6 @@ def process_file(file_info):
 
         if temp_outpath.exists():
             temp_outpath.rename(outpath) 
-
-# Save last processed date into a file
-def save_last_processed_date(processed_date):
-    with open('last_processed_date.txt', 'w') as file:
-        file.write(processed_date.strftime("%Y-%m-%d"))
 
 
 # Check the output parquet files and removed duplicates
@@ -167,13 +159,14 @@ if all_parquet_files:
     df_list = [pd.read_parquet(file) for file in all_parquet_files]
     combined_df = pd.concat(df_list, ignore_index=True)
     new_processed_date = combined_df['publication_date'].max().date()
-    save_last_processed_date(new_processed_date)
+
+    with open('last_processed_date.txt', 'w') as file:
+        file.write(new_processed_date.strftime("%Y-%m-%d"))
+
     print(f"Processed publications from {last_processed_date} to: {new_processed_date}")
 else:
     print("No new data processed.")
     new_processed_date = last_processed_date
-
-save_last_processed_date(new_processed_date)
 
 
 # Check the output parquet files and remove duplicates

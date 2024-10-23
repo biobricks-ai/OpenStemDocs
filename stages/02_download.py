@@ -13,31 +13,7 @@ from tqdm import tqdm
 dotenv.load_dotenv()
 scraperapi_key = os.getenv("SCRAPERAPI_KEY")
 
-#scraperapi_key = "your scraper api key"
-
-# define metadata columns or descriptors
-metadata_columns = [
-    'id', 'doi', 'url', 'type', 'type_crossref', 'publication_date', 'journal', 'publisher', 
-    'title', 'is_oa', 'authors', 'areas', 'themes', 'keywd', 'volume', 'issue', 'language',
-    'content_hash', 'file_path'
-] 
-
 ##### Functions #####
-
-# Load existing metadata from a parquet file if applicable
-def load_existing_metadata(metadata_output_dir, file_stem):
-    return pd.read_parquet(metadata_output_dir / f"{file_stem}_pdfs.parquet")
-
-# Save new metadata to a parquet file
-def save_metadata(metadata_df, metadata_output_dir, file_stem):
-    output_file = metadata_output_dir / f"{file_stem}_pdfs.parquet"
-    if output_file.exists():
-        existing_df = pd.read_parquet(output_file)
-        combined_df = pd.concat([existing_df, metadata_df], ignore_index=True)
-        combined_df.to_parquet(output_file, index=False)
-    else:
-        metadata_df.to_parquet(output_file, index=False)
-      
 
 # download pdf from url
 def download_pdf(url, file_output_dir, downloaded_hashes):
@@ -52,6 +28,7 @@ def download_pdf(url, file_output_dir, downloaded_hashes):
         if content_hash in downloaded_hashes:
             return None, None
 
+        # get rid of too small files
         if len(content) < 1024:
             return None, None
 
@@ -63,6 +40,7 @@ def download_pdf(url, file_output_dir, downloaded_hashes):
         with outfile_path.open('wb') as file:
             file.write(content)
 
+        # check if the file is a valid PDF
         if content.startswith(b'%PDF-'):
             try:
                 with outfile_path.open('rb') as file:
@@ -101,12 +79,19 @@ def extract_metadata(doi):
 
 ##### Execution #####
 
-# input and output directories
+# set input and output directories
 input_dir = Path('brick/articles.parquet')
 output_dir = Path('brick/pdfs')
 output_dir.mkdir(parents=True, exist_ok=True)
 metadata_output_dir = Path('brick/download.parquet')
 metadata_output_dir.mkdir(parents=True, exist_ok=True)
+
+# define final metadata columns or descriptors
+metadata_columns = [
+    'id', 'doi', 'url', 'type', 'type_crossref', 'publication_date', 'journal', 'publisher', 
+    'title', 'is_oa', 'authors', 'areas', 'themes', 'keywd', 'volume', 'issue', 'language',
+    'content_hash', 'file_path'
+] 
 
 # process each file
 for file in input_dir.glob('*.parquet'):
@@ -120,7 +105,8 @@ for file in input_dir.glob('*.parquet'):
     file_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Get the latest row where content_hash is assigned
-    existing_metadata = load_existing_metadata(metadata_output_dir, file.stem)
+    # Start from where it is left off (last downloaded pdf) instead of starting from row 0
+    existing_metadata = pd.read_parquet(metadata_output_dir / f"{file_stem}_pdfs.parquet")
     latest_row = existing_metadata[existing_metadata['content_hash'].notnull()].iloc[-1] if not existing_metadata.empty else None
 
     if latest_row is not None and 'doi' in latest_row:
@@ -167,6 +153,7 @@ for file in input_dir.glob('*.parquet'):
     # handle issues when no new data is generated
     if not results_df.empty:
 
+        # descriptors in the input parquet file        
         original_columns = [
             'id', 'doi','type', 'type_crossref', 'publication_date', 'title', 
             'is_oa', 'authors', 'areas', 'themes', 'keywd', 'volume', 'issue', 'language'
@@ -177,18 +164,21 @@ for file in input_dir.glob('*.parquet'):
         metadata_df = pd.merge(results_df, original_df, on='doi', how='left')
 
         # remove rows with no downloaded pdfs
-        metadata_df = metadata_df.dropna(subset=['content_hash'])
-        metadata_df = metadata_df.dropna(subset=['file_path'])
+        metadata_df = metadata_df.dropna(subset=['content_hash', 'file_path'])
 
         # select columns and remove duplicates
         metadata_df = metadata_df[metadata_columns]
-        metadata_df = metadata_df.drop_duplicates(subset=['id'])
         metadata_df = metadata_df.drop_duplicates(subset=['doi'])
 
         # save new metadata
-        if not metadata_df.empty:
-            output_file = metadata_output_dir / f"{file_stem}_pdfs.parquet"
-            save_metadata(metadata_df, file_output_dir, file_stem)
+        output_file = metadata_output_dir / f"{file_stem}_pdfs.parquet"
+        # add updated data to existing file and remove duplicates
+        if output_file.exists():
+            existing_df = pd.read_parquet(output_file)
+            combined_df = pd.concat([existing_df, metadata_df], ignore_index=True).drop_duplicates(subset=['doi', 'content_hash'])
+            combined_df.to_parquet(output_file, index=False)
+        else:
+            metadata_df.to_parquet(output_file, index=False)
 
 
 
