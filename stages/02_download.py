@@ -19,15 +19,15 @@ metadata_columns = [
 ##### Functions #####
 
 # Load existing metadata from a parquet file if applicable
-def load_existing_metadata(output_dir, file_stem):
-    existing_file = output_dir / f"{file_stem}_pdfs.parquet"
+def load_existing_metadata(file_output_dir, file_stem):
+    existing_file = file_output_dir / f"{file_stem}_pdfs.parquet"
     if existing_file.exists():
         return pd.read_parquet(existing_file)
     return pd.DataFrame(columns=metadata_columns)
 
 # Save new metadata to a parquet file
-def save_metadata(metadata_df, output_dir, file_stem):
-    output_file = output_dir / f"{file_stem}_pdfs.parquet"
+def save_metadata(metadata_df, file_output_dir, file_stem):
+    output_file = file_output_dir / f"{file_stem}_pdfs.parquet"
     if output_file.exists():
         existing_df = pd.read_parquet(output_file)
         combined_df = pd.concat([existing_df, metadata_df], ignore_index=True)
@@ -37,7 +37,7 @@ def save_metadata(metadata_df, output_dir, file_stem):
       
 
 # download pdf from url
-def download_pdf(url, output_dir, downloaded_hashes):
+def download_pdf(url, file_output_dir, downloaded_hashes):
     response = requests.get(f"http://api.scraperapi.com?api_key={scraperapi_key}&url={url}&render=true")
         
     if response.status_code == 200 and (
@@ -53,7 +53,9 @@ def download_pdf(url, output_dir, downloaded_hashes):
             return None, None
 
         filename = f"{content_hash}.pdf"
-        outfile_path = output_dir / filename
+        outfile_path = file_output_dir / filename
+
+        file_output_dir.mkdir(parents=True, exist_ok=True)
         
         with outfile_path.open('wb') as file:
             file.write(content)
@@ -77,7 +79,7 @@ def download_pdf(url, output_dir, downloaded_hashes):
     return None, None
 
 # retrieve publisher and journal from crossref
-# handling JSONDecodeError
+# handling errors including JSONDecodeError
 def extract_metadata(doi):
     base_url = "https://api.crossref.org/works/"
     response = requests.get(f"http://api.scraperapi.com",params={"api_key":scraperapi_key,"url":f"{base_url}{doi}"})
@@ -97,8 +99,8 @@ def extract_metadata(doi):
 ##### Execution #####
 
 # input and output directories
-input_dir = Path('brick')
-output_dir = Path('brick/pdfs')
+input_dir = Path('stages/brick')
+output_dir = Path('stages/brick/pdfs')
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # number of files to process
@@ -107,10 +109,16 @@ numfile = len(list(input_dir.glob('*.parquet')))
 # process each file
 for file in input_dir.glob('*.parquet'):
     # read parquet file (can be adjusted to read only a subset of the file)
-    df = pd.read_parquet(file)
+    df = pd.read_parquet(file)[:1000]
+
+    # create output directory (url_00, url_01, ...)
+    file_stem = file.stem
+
+    file_output_dir = output_dir / file_stem
+    file_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Get the latest row where content_hash is assigned
-    existing_metadata = load_existing_metadata(output_dir, file.stem)
+    existing_metadata = load_existing_metadata(file_output_dir, file.stem)
     latest_row = existing_metadata[existing_metadata['content_hash'].notnull()].iloc[-1] if not existing_metadata.empty else None
 
     if latest_row is not None and 'doi' in latest_row:
@@ -118,21 +126,19 @@ for file in input_dir.glob('*.parquet'):
     else:
         start_index = 0
 
-
     dois = df['doi'].tolist()[start_index:] 
     urls = df['url'].tolist()[start_index:]
 
-    file_stem = file.stem
-    existing_metadata = load_existing_metadata(output_dir, file_stem)
     downloaded_hashes = set(existing_metadata['content_hash'].tolist())  
-    results_list = []
 
-    with ThreadPoolExecutor(max_workers=numfile * 3) as executor:
+    # Execute download and metadata extraction in parallel
+    results_list = []
+    with ThreadPoolExecutor(max_workers=numfile * 4) as executor:
         results = list(tqdm(executor.map(
             lambda doi_url: (
                 doi_url[1], 
                 doi_url[0], 
-                *download_pdf(doi_url[1], output_dir, downloaded_hashes), 
+                *download_pdf(doi_url[1], file_output_dir, downloaded_hashes), 
                 *(extract_metadata(doi_url[0]) or [None, None])
             ),
             zip(dois, urls)
@@ -151,13 +157,14 @@ for file in input_dir.glob('*.parquet'):
                 })
                 downloaded_hashes.add(result[2])
 
+    # ensure no duplicates  
+    results_df = pd.DataFrame(results_list).drop_duplicates(subset=['doi','content_hash'])
 
-    results_df = pd.DataFrame(results_list)
 
     # merge hash, pdf path, journal and publisher to original data
     # handle issues when no new data is generated
     if not results_df.empty:
-    # original columns
+
         original_columns = [
             'id', 'doi','type', 'type_crossref', 'publication_date', 'title', 
             'is_oa', 'authors', 'areas', 'themes', 'keywd', 'volume', 'issue', 'language'
@@ -168,14 +175,18 @@ for file in input_dir.glob('*.parquet'):
         metadata_df = pd.merge(results_df, original_df, on='doi', how='left')
 
         # remove rows with no downloaded pdfs
-        metadata_df = metadata_df.dropna(subset=['content_hash', 'file_path'])
+        metadata_df = metadata_df.dropna(subset=['content_hash'])
+        metadata_df = metadata_df.dropna(subset=['file_path'])
 
+        # select columns and remove duplicates
         metadata_df = metadata_df[metadata_columns]
+        metadata_df = metadata_df.drop_duplicates(subset=['id'])
+        metadata_df = metadata_df.drop_duplicates(subset=['doi'])
 
         # save new metadata
         if not metadata_df.empty:
-            output_file = output_dir / f"{file_stem}_pdfs.parquet"
-            save_metadata(metadata_df, output_dir, file_stem)
+            output_file = file_output_dir / f"{file_stem}_pdfs.parquet"
+            save_metadata(metadata_df, file_output_dir, file_stem)
 
 
 
