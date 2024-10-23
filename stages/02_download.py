@@ -1,4 +1,6 @@
 import hashlib
+import os
+import dotenv
 import requests
 import pandas as pd
 import fastparquet
@@ -8,8 +10,12 @@ import pypdf
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 
-scraperapi_key = "Enter Api Key"
+dotenv.load_dotenv()
+scraperapi_key = os.getenv("SCRAPERAPI_KEY")
 
+#scraperapi_key = "your scraper api key"
+
+# define metadata columns or descriptors
 metadata_columns = [
     'id', 'doi', 'url', 'type', 'type_crossref', 'publication_date', 'journal', 'publisher', 
     'title', 'is_oa', 'authors', 'areas', 'themes', 'keywd', 'volume', 'issue', 'language',
@@ -19,15 +25,12 @@ metadata_columns = [
 ##### Functions #####
 
 # Load existing metadata from a parquet file if applicable
-def load_existing_metadata(file_output_dir, file_stem):
-    existing_file = file_output_dir / f"{file_stem}_pdfs.parquet"
-    if existing_file.exists():
-        return pd.read_parquet(existing_file)
-    return pd.DataFrame(columns=metadata_columns)
+def load_existing_metadata(metadata_output_dir, file_stem):
+    return pd.read_parquet(metadata_output_dir / f"{file_stem}_pdfs.parquet")
 
 # Save new metadata to a parquet file
-def save_metadata(metadata_df, file_output_dir, file_stem):
-    output_file = file_output_dir / f"{file_stem}_pdfs.parquet"
+def save_metadata(metadata_df, metadata_output_dir, file_stem):
+    output_file = metadata_output_dir / f"{file_stem}_pdfs.parquet"
     if output_file.exists():
         existing_df = pd.read_parquet(output_file)
         combined_df = pd.concat([existing_df, metadata_df], ignore_index=True)
@@ -102,23 +105,22 @@ def extract_metadata(doi):
 input_dir = Path('brick/articles.parquet')
 output_dir = Path('brick/pdfs')
 output_dir.mkdir(parents=True, exist_ok=True)
-
-# number of files to process
-numfile = len(list(input_dir.glob('*.parquet')))
+metadata_output_dir = Path('brick/download.parquet')
+metadata_output_dir.mkdir(parents=True, exist_ok=True)
 
 # process each file
 for file in input_dir.glob('*.parquet'):
     # read parquet file (can be adjusted to read only a subset of the file)
-    df = pd.read_parquet(file)[:1000]
+    df = pd.read_parquet(file)[:7500]
 
-    # create output directory (url_00, url_01, ...)
     file_stem = file.stem
 
+    # create output directory (url_00, url_01, ...) for downloaded pdfs
     file_output_dir = output_dir / file_stem
     file_output_dir.mkdir(parents=True, exist_ok=True)
 
     # Get the latest row where content_hash is assigned
-    existing_metadata = load_existing_metadata(file_output_dir, file.stem)
+    existing_metadata = load_existing_metadata(metadata_output_dir, file.stem)
     latest_row = existing_metadata[existing_metadata['content_hash'].notnull()].iloc[-1] if not existing_metadata.empty else None
 
     if latest_row is not None and 'doi' in latest_row:
@@ -133,7 +135,7 @@ for file in input_dir.glob('*.parquet'):
 
     # Execute download and metadata extraction in parallel
     results_list = []
-    with ThreadPoolExecutor(max_workers=numfile * 4) as executor:
+    with ThreadPoolExecutor(max_workers=16) as executor:
         results = list(tqdm(executor.map(
             lambda doi_url: (
                 doi_url[1], 
@@ -185,7 +187,7 @@ for file in input_dir.glob('*.parquet'):
 
         # save new metadata
         if not metadata_df.empty:
-            output_file = file_output_dir / f"{file_stem}_pdfs.parquet"
+            output_file = metadata_output_dir / f"{file_stem}_pdfs.parquet"
             save_metadata(metadata_df, file_output_dir, file_stem)
 
 

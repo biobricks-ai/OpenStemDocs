@@ -4,20 +4,14 @@ stages:
     deps:
     - stages/01_get_openaccess.py
     outs:
-    - brick:
+    - brick/articles.parquet:
         persist: true
   download:
     cmd: python stages/02_download.py
     deps:
-    - stages/brick/url_00.parquet
-    - stages/brick/url_01.parquet
-    - stages/brick/url_02.parquet
-    - stages/brick/url_03.parquet
-    - stages/brick/url_04.parquet
-    - stages/brick/url_05.parquet
-    - stages/brick/url_06.parquet
-    - stages/brick/url_07.parquet
+    - brick/articles.parquet
     outs:
-    - pdfs:
+    - brick/downloads.parquet:
         persist: True
-
+    - brick/pdfs:
+        persist: True
