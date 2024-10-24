@@ -59,36 +59,18 @@ def download_pdf(url, file_output_dir, downloaded_hashes):
     
     return None, None
 
-# retrieve publisher and journal from crossref
-# handling errors including JSONDecodeError
-def extract_metadata(doi):
-    base_url = "https://api.crossref.org/works/"
-    response = requests.get(f"http://api.scraperapi.com",params={"api_key":scraperapi_key,"url":f"{base_url}{doi}"})
-    if response.status_code == 200:
-        if 'application/json' in response.headers.get('Content-Type', ''): 
-            data = response.json()['message']
-            journal = data.get('container-title', [])
-            journal = journal[0] if journal else None
-            publisher = data.get('publisher', [])
-            publisher = publisher if publisher else None            
-            return {'journal': journal, 'publisher': publisher}
-        else:
-            return None
-    else:
-        return None
-
 ##### Execution #####
 
 # set input and output directories
 input_dir = Path('brick/articles.parquet')
-output_dir = Path('brick/pdfs')
+output_dir = Path('/mnt/ssd_raid/workspace-paween/projects/OpenStemDocs/brick/pdfs')
 output_dir.mkdir(parents=True, exist_ok=True)
-metadata_output_dir = Path('brick/download.parquet')
+metadata_output_dir = Path('/mnt/ssd_raid/workspace-paween/projects/OpenStemDocs/brick/downloads.parquet')
 metadata_output_dir.mkdir(parents=True, exist_ok=True)
 
 # define final metadata columns or descriptors
 metadata_columns = [
-    'id', 'doi', 'url', 'type', 'type_crossref', 'publication_date', 'journal', 'publisher', 
+    'id', 'doi', 'url', 'type', 'type_crossref', 'publication_date',
     'title', 'is_oa', 'authors', 'areas', 'themes', 'keywd', 'volume', 'issue', 'language',
     'content_hash', 'file_path'
 ] 
@@ -96,7 +78,7 @@ metadata_columns = [
 # process each file
 for file in input_dir.glob('*.parquet'):
     # read parquet file (can be adjusted to read only a subset of the file)
-    df = pd.read_parquet(file)[:7500]
+    df = pd.read_parquet(file)[:5000]
 
     file_stem = file.stem
 
@@ -106,7 +88,9 @@ for file in input_dir.glob('*.parquet'):
 
     # Get the latest row where content_hash is assigned
     # Start from where it is left off (last downloaded pdf) instead of starting from row 0
-    existing_metadata = pd.read_parquet(metadata_output_dir / f"{file_stem}_pdfs.parquet")
+    metadata_file = metadata_output_dir / f"{file_stem}_pdfs.parquet"
+    existing_metadata = pd.read_parquet(metadata_file) if metadata_file.exists() else pd.DataFrame(columns=['content_hash'])
+        
     latest_row = existing_metadata[existing_metadata['content_hash'].notnull()].iloc[-1] if not existing_metadata.empty else None
 
     if latest_row is not None and 'doi' in latest_row:
@@ -121,13 +105,12 @@ for file in input_dir.glob('*.parquet'):
 
     # Execute download and metadata extraction in parallel
     results_list = []
-    with ThreadPoolExecutor(max_workers=16) as executor:
+    with ThreadPoolExecutor(max_workers=40) as executor:
         results = list(tqdm(executor.map(
             lambda doi_url: (
                 doi_url[1], 
                 doi_url[0], 
-                *download_pdf(doi_url[1], file_output_dir, downloaded_hashes), 
-                *(extract_metadata(doi_url[0]) or [None, None])
+                *download_pdf(doi_url[1], file_output_dir, downloaded_hashes)
             ),
             zip(dois, urls)
         ), total=len(dois), desc='Downloading PDFs'))
@@ -139,9 +122,7 @@ for file in input_dir.glob('*.parquet'):
                     'doi': result[1],                # DOI  
                     'url': result[0],                # URL
                     'content_hash': str(result[3]),  # Hash
-                    'file_path': str(result[2]),     # Path
-                    'journal': str(result[4]),       # Journal
-                    'publisher': str(result[5])      # Publisher
+                    'file_path': str(result[2])     # Path
                 })
                 downloaded_hashes.add(result[2])
 
@@ -170,7 +151,7 @@ for file in input_dir.glob('*.parquet'):
         metadata_df = metadata_df[metadata_columns]
         metadata_df = metadata_df.drop_duplicates(subset=['doi'])
 
-        # save new metadata
+
         output_file = metadata_output_dir / f"{file_stem}_pdfs.parquet"
         # add updated data to existing file and remove duplicates
         if output_file.exists():

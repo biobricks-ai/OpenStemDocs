@@ -21,7 +21,7 @@ def get_last_processed_date():
     last_processed_file = Path('last_processed_date.txt')
     if last_processed_file.exists():
         with open(last_processed_file, 'r') as file:
-            return datetime.strptime(file.read(), "%Y-%m-%d").date()
+            return datetime.strptime(file.read().strip(), "%Y-%m-%d").date()
     else:
         print("No last processed date found, using 324 years before today starting from Jan 1 (testing for now)")
         today = date.today()
