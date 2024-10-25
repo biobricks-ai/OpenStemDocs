@@ -5,7 +5,9 @@ stages:
     - stages/01_get_openaccess.py
     outs:
     - brick/articles.parquet:
-        persist: true
+        persist: True
+    - cache/loadurls/last_processed_date.txt:
+        persist: True
   download:
     cmd: python stages/02_download.py
     deps:
