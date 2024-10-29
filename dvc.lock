@@ -1,0 +1,38 @@
+schema: '2.0'
+stages:
+  loadurls:
+    cmd: python stages/01_get_openaccess.py
+    deps:
+    - path: stages/01_get_openaccess.py
+      hash: md5
+      md5: e2d78bb2d631aae3d87a849b0a5c23ad
+      size: 6677
+    outs:
+    - path: brick/articles.parquet
+      hash: md5
+      md5: e46d3ddadc895d9fc5163c353c1f1fda.dir
+      size: 2740364759
+      nfiles: 8
+    - path: cache/loadurls/last_processed_date.txt
+      hash: md5
+      md5: dd5a89cc636fe0091c75148a95a33653
+      size: 10
+  download:
+    cmd: python stages/02_download.py
+    deps:
+    - path: brick/articles.parquet
+      hash: md5
+      md5: e46d3ddadc895d9fc5163c353c1f1fda.dir
+      size: 2740364759
+      nfiles: 8
+    outs:
+    - path: brick/downloads.parquet
+      hash: md5
+      md5: 0e1dc22f362b93420fb1803f6c6a49fe.dir
+      size: 8650334
+      nfiles: 8
+    - path: brick/pdfs
+      hash: md5
+      md5: 9afef59f9112ad2718b375d486447463.dir
+      size: 41047463721
+      nfiles: 21945
