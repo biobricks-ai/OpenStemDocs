@@ -9,10 +9,12 @@ from pathlib import Path
 import pypdf
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
+import threading
 
 dotenv.load_dotenv()
 scraperapi_key = os.getenv("SCRAPERAPI_KEY")
 
+lock = threading.Lock()
 ##### Functions #####
 
 # download pdf from url
@@ -55,12 +57,10 @@ def download_pdf(url, file_output_dir, downloaded_hashes, session=None):
                     if len(reader.pages) > 0:
                         return outfile_path, content_hash
             except Exception:
-                if outfile_path.exists(): 
-                    outfile_path.unlink() 
-                return None, None
-                
-            if outfile_path.exists():
-                outfile_path.unlink()
+                with lock:
+                    if outfile_path.exists(): 
+                        outfile_path.unlink() 
+                    return None, None
     
     return None, None
 
@@ -82,7 +82,7 @@ metadata_columns = [
 
 # process each file
 for file in input_dir.glob('*.parquet'):
-    df = pd.read_parquet(file)[:150000]
+    df = pd.read_parquet(file)[:160000]
 
     file_stem = file.stem
 
@@ -108,7 +108,7 @@ for file in input_dir.glob('*.parquet'):
 
     # Execute download using multiple threads (I/O bound operation)
     results_list = []
-    with ThreadPoolExecutor(max_workers=40) as executor:
+    with ThreadPoolExecutor(max_workers=96) as executor:
         results = list(tqdm(executor.map(
             lambda doi_url: (
                 doi_url[1], 
