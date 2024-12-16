@@ -23,12 +23,17 @@ def download_pdf(url, file_output_dir, downloaded_hashes, session=None):
     if session is None:
         session = requests.Session()
     
+    # first round with non-api
+    response = requests.get(url)
+
+    if response.status_code != 200:
+    # use scraperapi for second attempt
     # skip an url if connection error occurs (RequestsException covers ConnectionError, HTTPError and JSONError)
-    try:
-        response = requests.get(f"http://api.scraperapi.com?api_key={scraperapi_key}&url={url}&render=true")
-        response.raise_for_status()
-    except requests.exceptions.RequestException:
-        return None, None 
+        try:
+            response = requests.get(f"http://api.scraperapi.com?api_key={scraperapi_key}&url={url}&render=true")
+            response.raise_for_status()
+        except requests.exceptions.RequestException:
+            return None, None 
     
     if response.status_code == 200:
         content = response.content
