@@ -24,9 +24,10 @@ def download_pdf(url, file_output_dir, downloaded_hashes, session=None):
         session = requests.Session()
     
     # first round with non-api
-    response = requests.get(url)
-
-    if response.status_code != 200:
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+    except requests.exceptions.RequestException:
     # use scraperapi for second attempt
     # skip an url if connection error occurs (RequestsException covers ConnectionError, HTTPError and JSONError)
         try:
