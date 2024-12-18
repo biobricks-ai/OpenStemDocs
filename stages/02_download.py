@@ -87,7 +87,7 @@ metadata_columns = [
 
 # process each file
 for file in input_dir.glob('*.parquet'):
-    df = pd.read_parquet(file)[:160000]
+    df = pd.read_parquet(file)[:315000]
 
     file_stem = file.stem
 
